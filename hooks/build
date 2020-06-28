@@ -1,0 +1,3 @@
+#!/bin/bash
+docker build --target=production -t $DOCKER_REPO:$DOCKER_TAG .
+docker build --target=development -t $DOCKER_REPO-dev:$DOCKER_TAG .
