@@ -10,7 +10,6 @@ if [ "$DOCKER_TAG" == "latest" ] ; then
 
     docker build --build-arg PHP_VERSION=7.4 --target=production -t $DOCKER_REPO:7.4 .
     docker build --build-arg PHP_VERSION=7.4 --target=development -t $DOCKER_REPO:7.4-dev .
-
 else
     docker build --build-arg PHP_VERSION=7.3 --target=production -t $DOCKER_REPO:$DOCKER_TAG .
     docker build --build-arg PHP_VERSION=7.3 --target=production -t $DOCKER_REPO:$DOCKER_TAG-dev .
