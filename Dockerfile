@@ -1,4 +1,6 @@
-FROM php:7.3-fpm AS production
+ARG PHP_VERSION=7.3
+
+FROM php:${PHP_VERSION}-fpm AS production
 
 # Setup FPM
 RUN sed -i 's/;error_log = log\/php-fpm.log/error_log = \/dev\/stderr/' /usr/local/etc/php-fpm.conf
