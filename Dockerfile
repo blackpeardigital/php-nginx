@@ -1,13 +1,13 @@
-ARG PHP_VERSION=7.4.11
-
-FROM php:${PHP_VERSION}-fpm AS production
+FROM php:7.4.11-fpm AS production
 
 # Setup FPM
 RUN sed -i 's/;error_log = log\/php-fpm.log/error_log = \/dev\/stderr/' /usr/local/etc/php-fpm.conf
 COPY php-fpm.d/* /usr/local/etc/php-fpm.d/
 
+
+
 # Nginx
-ARG NGINX_VERSION=1.14.2-2+deb10u1
+ARG NGINX_VERSION=1.14.2-2+deb10u4
 RUN apt-get update && apt-get install -y --no-install-recommends \
         supervisor \
         nginx-full=${NGINX_VERSION}  \
