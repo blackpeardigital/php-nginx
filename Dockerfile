@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         supervisor \
         nginx-full=${NGINX_VERSION}  \
     && rm -rf /var/lib/apt/lists/*
+# Copy over fixed config, to prevent future updates having unexpected consequences
+COPY nginx/* /etc/nginx/
 COPY nginx/sites-available/* /etc/nginx/sites-available/
 COPY bin/* /usr/bin/
 EXPOSE 80
