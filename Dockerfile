@@ -7,18 +7,34 @@ COPY php-fpm.d/* /usr/local/etc/php-fpm.d/
 
 
 # Nginx
-ARG NGINX_VERSION=1.14.2-2+deb10u4
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        supervisor \
-        nginx-full=${NGINX_VERSION}  \
+ARG NGINX_VERSION=1.21.6-1~buster
+RUN CODENAME=$(cat /etc/*-release|grep -oP  'CODENAME=\K\w+$'|head -1) ; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        wget apt-utils gnupg2 \
+    && wget https://nginx.org/keys/nginx_signing.key \
+    && apt-key add nginx_signing.key \
+    && rm -r nginx_signing.key \
+    && echo "deb https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx \n\
+deb-src https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx" >> /etc/apt/sources.list \
+    && cat /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nginx=${NGINX_VERSION} \
     && rm -rf /var/lib/apt/lists/*
+
 # Copy over fixed config, to prevent future updates having unexpected consequences
 COPY nginx/* /etc/nginx/
-COPY nginx/sites-available/* /etc/nginx/sites-available/
+COPY nginx/conf.d/* /etc/nginx/conf.d/
+COPY nginx/snippets /etc/nginx/snippets/
 COPY bin/* /usr/bin/
 EXPOSE 80
 
+RUN nginx -t
+
 # Setup supervisord
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        supervisor \
+    && rm -rf /var/lib/apt/lists/*
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
