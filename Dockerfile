@@ -8,13 +8,11 @@ COPY php-fpm.d/* /usr/local/etc/php-fpm.d/
 
 # Nginx
 ARG NGINX_VERSION=1.21.6-1~buster
+COPY nginx_signing.key ./
 RUN CODENAME=$(cat /etc/*-release|grep -oP  'CODENAME=\K\w+$'|head -1) ; \
     apt-get update \
-    && apt-get install -y --no-install-recommends \
-        wget apt-utils gnupg2 \
-    && wget https://nginx.org/keys/nginx_signing.key \
+    && apt-get install -y --no-install-recommends apt-utils gnupg2 \
     && apt-key add nginx_signing.key \
-    && rm -r nginx_signing.key \
     && echo "deb https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx \n\
 deb-src https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx" >> /etc/apt/sources.list \
     && cat /etc/apt/sources.list \
