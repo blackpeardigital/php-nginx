@@ -1,23 +1,73 @@
-FROM php:7.4.11-fpm AS production
+###############################################################################
+#                            Builder / Base Stage                             #
+#  - Central ARG for PHP version bump                                         #
+###############################################################################
+# syntax=docker/dockerfile:1
+ARG PHP_VERSION=8.3-fpm
 
-# Setup FPM
-RUN sed -i 's/;error_log = log\/php-fpm.log/error_log = \/dev\/stderr/' /usr/local/etc/php-fpm.conf
-COPY php-fpm.d/* /usr/local/etc/php-fpm.d/
+FROM php:${PHP_VERSION} AS base
 
-
-
-# Nginx
-ARG NGINX_VERSION=1.21.6-1~buster
-COPY nginx_signing.key ./
-RUN CODENAME=$(cat /etc/*-release|grep -oP  'CODENAME=\K\w+$'|head -1) ; \
+# -----------------------------------------------------------------------------
+# 1. Install system deps and rebuild core PHP extensions for 8.3
+# -----------------------------------------------------------------------------
+RUN set -eux; \
     apt-get update \
-    && apt-get install -y --no-install-recommends apt-utils gnupg2 \
-    && apt-key add nginx_signing.key \
-    && echo "deb https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx \n\
-deb-src https://nginx.org/packages/mainline/debian/ ${CODENAME} nginx" >> /etc/apt/sources.list \
-    && cat /etc/apt/sources.list \
+    && apt-get install -y --no-install-recommends \
+        libzip-dev \
+        libonig-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libfreetype6-dev \
+        zip \
+        unzip \
+    && docker-php-ext-configure zip \
+    && docker-php-ext-install \
+        pdo_mysql \
+        zip \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        opcache \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# 2. Configure PHP-FPM to log errors to STDERR
+# -----------------------------------------------------------------------------
+RUN sed -i \
+        's@;error_log = log/php-fpm.log@error_log = /dev/stderr@' \
+        /usr/local/etc/php-fpm.conf
+COPY php-fpm.d/*.conf /usr/local/etc/php-fpm.d/
+
+###############################################################################
+#                             Production Stage                                #
+###############################################################################
+FROM base AS production
+
+# -----------------------------------------------------------------------------
+# 3. Install nginx mainline (Debian 12 “bookworm”)
+# -----------------------------------------------------------------------------
+ARG NGINX_VERSION=1.29.0-1~bookworm
+RUN set -eux; \
+    # pull in tools to fetch & verify the key
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gnupg \
+        curl \
+    && mkdir -p /etc/apt/keyrings \
+    # fetch and dearmor nginx.org signing key
+    && curl -fsSL https://nginx.org/keys/nginx_signing.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nginx.gpg \
+    # add signed mainline repo for bookworm
+    && echo "deb [signed-by=/etc/apt/keyrings/nginx.gpg] https://nginx.org/packages/mainline/debian/ bookworm nginx" \
+       > /etc/apt/sources.list.d/nginx.list \
+    && echo "deb-src [signed-by=/etc/apt/keyrings/nginx.gpg] https://nginx.org/packages/mainline/debian/ bookworm nginx" \
+       >> /etc/apt/sources.list.d/nginx.list \
+    # install the exact pinned package
     && apt-get update \
-    && apt-get install -y --no-install-recommends nginx=${NGINX_VERSION} \
+    && apt-get install -y --no-install-recommends \
+        nginx=${NGINX_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy over fixed config, to prevent future updates having unexpected consequences
@@ -29,29 +79,39 @@ EXPOSE 80
 
 RUN nginx -t
 
-# Setup supervisord
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        supervisor \
+# -----------------------------------------------------------------------------
+# 4. Supervisor to orchestrate php-fpm + nginx
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends supervisor \
     && rm -rf /var/lib/apt/lists/*
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
+###############################################################################
+#                             Development Stage                               #
+###############################################################################
+FROM production AS development
 
-FROM production AS development 
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        nano \
+# -----------------------------------------------------------------------------
+# 5. Dev tools: nano + Xdebug
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends nano \
+    && pecl install xdebug \
+    && docker-php-ext-enable xdebug \
     && rm -rf /var/lib/apt/lists/*
 
-# Xdebug
-RUN pecl install xdebug \
-    && docker-php-ext-enable xdebug \
-    && touch /var/log/xdebug.log && chmod 777 /var/log/xdebug.log \
-    # TODO: permissions don't work with new volumes
-    && mkdir /var/log/xdebug-profiler && chmod 777 /var/log/xdebug-profiler
+# prepare Xdebug log & profiler dirs
+RUN touch /var/log/xdebug.log \
+    && chmod 666 /var/log/xdebug.log \
+    && mkdir -p /var/log/xdebug-profiler \
+    && chmod 777 /var/log/xdebug-profiler
 
 # XDebug Port
 EXPOSE 9000
 
-# Setup php.ini settings
+# load any PHP INI overrides for development
 COPY dev-ini/*.ini /usr/local/etc/php/conf.d/
