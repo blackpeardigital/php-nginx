@@ -3,7 +3,10 @@
 #  - Central ARG for PHP version bump                                         #
 ###############################################################################
 # syntax=docker/dockerfile:1
-ARG PHP_VERSION=8.3-fpm
+# PHP 8.3.36 includes the PHP2Shell security fixes (CVE-2026-109618 and
+# CVE-2026-109619). Keep this pinned so rebuilds cannot silently use an older
+# vulnerable runtime.
+ARG PHP_VERSION=8.3.36-fpm
 
 FROM php:${PHP_VERSION} AS base
 
